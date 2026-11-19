@@ -4,9 +4,11 @@ import {
   buildPortfolioSnapshot,
   buildPortfolioSnapshotKey,
   FinancialAiDiagnosisResult,
+  generateLocalFinancialDiagnosis,
   PortfolioDiagnosticSnapshot,
-  requestFinancialAiDiagnosis,
 } from '../utils/financialDiagnosis';
+
+const ANALYSIS_ANIMATION_MS = 1000;
 
 export interface FinancialAiDiagnosisController {
   isOpen: boolean;
@@ -16,7 +18,7 @@ export interface FinancialAiDiagnosisController {
   diagnosis: FinancialAiDiagnosisResult | null;
   generatedAt: string | null;
   snapshot: PortfolioDiagnosticSnapshot;
-  generateDiagnosis: () => Promise<void>;
+  generateDiagnosis: () => void;
   dismissDiagnosis: () => void;
 }
 
@@ -30,79 +32,65 @@ export function useFinancialAiDiagnosis(
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [diagnosis, setDiagnosis] = useState<FinancialAiDiagnosisResult | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
   const lastAnalyzedKeyRef = useRef<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const requestSeqRef = useRef(0);
+  const timerRef = useRef<number | null>(null);
 
-  const runDiagnosis = useCallback(
-    async (
+  const clearPendingTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const runLocalAnalysis = useCallback(
+    (
       targetSnapshot: PortfolioDiagnosticSnapshot,
       targetKey: string,
-      options: { backgroundRefresh: boolean; notifyOnDone: boolean }
+      options: { delayMs: number; backgroundRefresh: boolean; notifyOnDone: boolean }
     ) => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      requestSeqRef.current += 1;
-      const currentSeq = requestSeqRef.current;
-
+      clearPendingTimer();
       setIsOpen(true);
-      setError(null);
+
       if (options.backgroundRefresh) {
         setIsRefreshing(true);
       } else {
         setIsLoading(true);
       }
 
-      try {
-        const res = await requestFinancialAiDiagnosis(targetSnapshot, controller.signal);
-        if (currentSeq !== requestSeqRef.current) return;
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        const result = generateLocalFinancialDiagnosis(targetSnapshot);
         lastAnalyzedKeyRef.current = targetKey;
-        setDiagnosis(res.diagnosis);
-        setGeneratedAt(res.generatedAt);
+        setDiagnosis(result);
+        setGeneratedAt(new Date().toISOString());
+        setIsLoading(false);
+        setIsRefreshing(false);
         if (options.notifyOnDone) {
           onNotify?.('Diagnóstico IA generado con los datos actuales de tu cartera.');
         }
-      } catch (err) {
-        if (controller.signal.aborted || currentSeq !== requestSeqRef.current) return;
-        const msg =
-          err instanceof Error
-            ? err.message
-            : 'No se pudo completar el diagnóstico financiero con IA.';
-        setError(msg);
-      } finally {
-        if (currentSeq === requestSeqRef.current) {
-          setIsLoading(false);
-          setIsRefreshing(false);
-        }
-      }
+      }, options.delayMs);
     },
-    [onNotify]
+    [clearPendingTimer, onNotify]
   );
 
-  const generateDiagnosis = useCallback(async () => {
-    await runDiagnosis(snapshot, snapshotKey, {
-      backgroundRefresh: Boolean(diagnosis),
+  const generateDiagnosis = useCallback(() => {
+    runLocalAnalysis(snapshot, snapshotKey, {
+      delayMs: ANALYSIS_ANIMATION_MS,
+      backgroundRefresh: false,
       notifyOnDone: true,
     });
-  }, [runDiagnosis, snapshot, snapshotKey, diagnosis]);
+  }, [runLocalAnalysis, snapshot, snapshotKey]);
 
   const dismissDiagnosis = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    clearPendingTimer();
     setIsOpen(false);
     setIsLoading(false);
     setIsRefreshing(false);
-    setError(null);
     lastAnalyzedKeyRef.current = null;
-  }, []);
+  }, [clearPendingTimer]);
 
   // Recalcular automáticamente si el diagnóstico está abierto y cambian propiedades, pagos o fecha simulada
   useEffect(() => {
@@ -110,29 +98,24 @@ export function useFinancialAiDiagnosis(
     if (lastAnalyzedKeyRef.current === null) return;
     if (snapshotKey === lastAnalyzedKeyRef.current) return;
 
-    const timer = window.setTimeout(() => {
-      void runDiagnosis(snapshot, snapshotKey, {
-        backgroundRefresh: true,
-        notifyOnDone: false,
-      });
-    }, 200);
-
-    return () => window.clearTimeout(timer);
-  }, [isOpen, snapshot, snapshotKey, runDiagnosis]);
+    runLocalAnalysis(snapshot, snapshotKey, {
+      delayMs: 350,
+      backgroundRefresh: true,
+      notifyOnDone: false,
+    });
+  }, [isOpen, snapshot, snapshotKey, runLocalAnalysis]);
 
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      clearPendingTimer();
     };
-  }, []);
+  }, [clearPendingTimer]);
 
   return {
     isOpen,
     isLoading,
     isRefreshing,
-    error,
+    error: null,
     diagnosis,
     generatedAt,
     snapshot,

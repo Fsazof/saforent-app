@@ -139,25 +139,28 @@ export function FinancialAiDiagnosisCard({ controller }: FinancialAiDiagnosisCar
           </span>
         </div>
         <div className="px-4 py-3">
-          <span className="block text-[#6B7280]">Propiedades disponibles</span>
+          <span className="block text-[#6B7280]">Vacancia e IPC</span>
           <span className="font-mono tabular-nums font-bold text-[#111827] text-sm">
             {snapshot.availableCount} disponible{snapshot.availableCount === 1 ? '' : 's'} (
             {snapshot.occupancyRatePct}% ocupación)
           </span>
           <span className="block text-[#6B7280] tabular-nums">
-            Potencial vacante: {formatClp(snapshot.potentialAvailableRentClp)} / mes
+            {snapshot.upcomingIpcCount > 0
+              ? `${snapshot.upcomingIpcCount} IPC próximo${snapshot.upcomingIpcCount === 1 ? '' : 's'} (60 d)`
+              : `Vacante: ${formatClp(snapshot.potentialAvailableRentClp)} / mes`}
           </span>
         </div>
       </div>
 
       {/* Contenido del diagnóstico */}
       <div className="p-5 sm:p-6 space-y-5">
-        {isLoading && !diagnosis ? (
+        {isLoading ? (
           <div className="space-y-4" aria-live="polite">
             <p className="text-sm font-medium text-[#14294A] flex items-center gap-2">
               <RefreshCw className="w-4 h-4 animate-spin shrink-0" aria-hidden="true" />
               <span>
-                Analizando ingresos, morosidades, multas, gastos de mantención y vacancia...
+                Analizando cartera... evaluando ingresos, morosidades, multas, mantenciones,
+                vacancia y próximos reajustes IPC
               </span>
             </p>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
