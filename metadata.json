@@ -1,0 +1,6 @@
+{
+  "name": "Saforent APP",
+  "description": "Aplicación web responsiva para la gestión simple de arriendos en Chile.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
